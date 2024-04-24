@@ -1,0 +1,24 @@
+---
+- name: delete the folder if its present
+  file:
+    path: "../terraform/stacks/{{ role_name }}"
+    state: absent
+
+- name: create folder if does not exists ======={{ role_name }}=======
+  file:
+    path: "../terraform/stacks/{{ role_name }}"
+    state: directory
+
+- name: copy all static files for role
+  copy:
+    src: "{{ item }}"
+    dest: ../terraform/stacks/{{ role_name }}/{{ item | basename }}
+  with_fileglob:
+    - ../files/*.tf
+
+- name: copy all template files for role
+  template:
+    src: "{{ item }}"
+    dest: ../terraform/stacks/{{ role_name }}/{{ item | basename | regex_replace('\.j2','') }}
+  with_fileglob:
+    - ../templates/*.j2

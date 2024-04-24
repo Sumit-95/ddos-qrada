@@ -1,0 +1,9 @@
+terraform {
+  backend "s3" {
+    bucket         = "{{ aws_business_entity | lower }}-{{ aws_account | lower }}-{{ aws_env | lower }}-terraform"
+    key            = "ddos-to-qradar/regional/{{ aws_region }}/terraform.tfstate"
+    region         = "eu-west-2"
+    encrypt        = true
+    dynamodb_table = "{{ aws_business_entity | lower }}-{{ aws_account | lower }}-{{ aws_env | lower }}-terraform-locks"
+  }
+}

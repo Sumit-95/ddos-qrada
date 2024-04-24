@@ -1,0 +1,28 @@
+variable "aws_region" {
+  description = "The region to connect to and use for the creation of resources."
+  default     = "{{ aws_region | lower }}"
+}
+
+variable "environment" {
+  default = "{{ aws_env | lower }}"
+}
+
+variable "service_name" {
+  default = "{{ aws_business_entity | lower }}-{{ aws_env | lower }}-{{ aws_account | lower }}-ddos-qradar"
+}
+
+variable "cost_centre" {
+  default = "CC51256"
+}
+
+variable "application_id" {
+  default = "APP-00814"
+}
+
+variable "log_group_name"{
+  default = "ddos-qradar-test-1"
+}
+
+variable "lambda_prefix" {
+  default = "{{ aws_business_entity | lower }}-{{ aws_env | lower }}"
+}

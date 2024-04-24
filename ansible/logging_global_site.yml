@@ -1,0 +1,25 @@
+- name: print variable values here
+  hosts: localhost
+  vars_files:
+    - "./vars/logging_vars.yml"
+  connection: local
+  tasks:
+    - debug:
+        msg:
+          [
+            "account_name  : {{ aws_account_name }}",
+            "aws_region    : {{ aws_region }}",
+            "selected_services: {{ roles }}",
+            "aws_business_entity: {{ aws_business_entity }}",
+            "aws_account: {{ aws_account }}",
+            "aws_env: {{ aws_env }}",
+          ]
+
+- name: execute roles
+  hosts: localhost
+  vars_files:
+    - "./vars/logging_vars.yml"
+  connection: local
+  roles:
+    - { role: logging_global, when: "'logging_global' in roles" }
+    - { role: logging_regional, when: "'logging_regional' in roles"  }

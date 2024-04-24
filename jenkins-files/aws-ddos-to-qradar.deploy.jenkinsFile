@@ -1,0 +1,107 @@
+/**
+    * This Jenkins pipeline manages the Terraform deployment of the aws_ddos_to_qradar
+    * in Aws.
+*/
+
+node('master'){
+
+    def aws_regions              = params.aws_regions.split(",").sort()
+    def aws_admin_account_name   = params.aws_admin_account_name.trim()
+    def aws_logging_account_name = params.aws_logging_account_name.trim()
+    def aws_org_role             = params.aws_org_role
+    def terraform_path           = params.terraform_path
+    def aws_logging_account_id   = ""
+    
+
+    switch(aws_logging_account_name) { 
+        case "AWS-BSL-LOGGING-CETDEV": 
+            aws_credentials_id = "aws_cetdev_adfs_binding"
+            break
+        case "AWS-BSL-LOGGING-CETTEST": 
+            aws_credentials_id = "aws_test_adfs_binding"
+            break
+        case "AWS-BSL-LOGGING-PROD":
+            aws_credentials_id = "aws_adfs_binding"
+            break
+        default:
+            error("The account name provided is not a logging account.")
+    }
+
+    // Jenkins ANSI Color Plugin. For more information please see:
+    // https://github.com/jenkinsci/ansicolor-plugin
+    wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
+
+        // Checking out the ddos_to_QRadar repository
+        stage('checkout') {
+            checkout scm
+        }
+
+        // Executing the organization_acc python module so as to obtain the 
+        // child account id
+        stage("obtaining logging account id") {
+            withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: aws_credentials_id, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD']]) {
+                aws_logging_account_id = sh script: "source /abcd/jenkins/cps_python/bin/activate && python -c \"from helpers import organization_acc as a; print(a.get_account_id(\'${aws_logging_account_name}\', \'${USERNAME}\', \'${PASSWORD}\',\'${aws_org_role}\', \'${aws_regions}\'))\" ", returnStdout: true
+                aws_logging_account_id = aws_logging_account_id.trim()
+                echo "================= Logging account ID is ${aws_logging_account_id} ================="
+            }
+        }
+
+        if (terraform_include_logging_global_service == 'true'){
+            def switch_role = "arn:aws:iam::${aws_logging_account_id}:role/OrganizationAccountAccessRole"
+            stage('creating global resources') {
+                echo "===================== Ansibilizing The Logging Global Modules ============================"
+                sh """
+                    export ANSIBLE_FORCE_COLOR=true
+                    source /abcd/jenkins/cps_python/bin/activate 
+                    cd ansible 
+                    ansible-playbook logging_global_site.yml --extra-vars='{roles : logging_global, aws_account_name: ${aws_logging_account_name}, aws_region: eu-west-2 }'
+                """
+                runTerraformWithADFSCred("terraform/stacks/logging_global", terraform_path, aws_org_role, aws_credentials_id, "eu-west-2", switch_role) 
+            }
+        }
+
+        if (terraform_include_logging_global_service == 'true'){
+            def switch_role = "arn:aws:iam::${aws_logging_account_id}:role/OrganizationAccountAccessRole"
+            stage('creating global resources') {
+                echo "===================== Ansibilizing The Logging Global Modules ============================"
+                sh """
+                    export ANSIBLE_FORCE_COLOR=true
+                    source /abcd/jenkins/cps_python/bin/activate 
+                    cd ansible 
+                    ansible-playbook logging_global_site.yml --extra-vars='{roles : logging_global, aws_account_name: ${aws_logging_account_name}, aws_region: eu-west-2 }'
+                """
+                runTerraformWithADFSCred("terraform/stacks/logging_global", terraform_path, aws_org_role, aws_credentials_id, "eu-west-2", switch_role) 
+            }
+        }
+        if (terraform_include_logging_regional_service == 'true'){
+            for (i = 0; i < aws_regions.size(); i++) {  
+                def aws_region = aws_regions[i]
+                def switch_role = "arn:aws:iam::${aws_logging_account_id}:role/OrganizationAccountAccessRole"
+                stage("logging regional modules in: ${aws_region}"){
+                    echo "===================== Ansibilizing The Logging Regional Modules For ${aws_region} ============================"
+                    sh """
+                        export ANSIBLE_FORCE_COLOR=true
+                        source /abcd/jenkins/cps_python/bin/activate 
+                        cd ansible 
+                        ansible-playbook logging_global_site.yml --extra-vars='{roles : logging_regional, aws_account_name: ${aws_logging_account_name}, aws_region: ${aws_region} }'
+                    """
+                    runTerraformWithADFSCred("terraform/stacks/logging_regional/${aws_region}", terraform_path, aws_org_role, aws_credentials_id, aws_region, switch_role) 
+                }
+            }
+        }
+		
+    }
+}
+
+
+def runTerraformWithADFSCred(wrk_dir, terraform_path, aws_org_role, aws_credentials_id, aws_region, switch_role, parallelism="True") {
+    withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: aws_credentials_id, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD']]){
+        sh """
+            source /abcd/jenkins/cps_python/bin/activate
+            python -c \"from helpers import terraform as tf; tf.execute_terraform(\'${terraform_path}\',\'${USERNAME}\', \'${PASSWORD}\',\'${aws_org_role}\', \'${wrk_dir}\', \'${terraform_action}\', \'${aws_region}\', \'${switch_role}\', \'${parallelism}\')\"
+            deactivate
+        """
+    }
+}
+
+
